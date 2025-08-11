@@ -1,0 +1,47 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class Camera extends Model
+{
+    use SoftDeletes;
+
+    protected $fillable = [
+        'site_id',
+        'control_room_id',
+        'name',
+        'camera_type',
+        'is_priority',
+        'sort_order',
+        'is_active',
+        'is_online',
+    ];
+
+    protected $casts = [
+        'camera_type' => 'string',
+    ];
+
+    // Relationships
+    public function site()
+    {
+        return $this->belongsTo(Site::class);
+    }
+
+    public function controlRoom()
+    {
+        return $this->belongsTo(ControlRoom::class);
+    }
+
+    public function notifications()
+    {
+        return $this->hasMany(Notification::class);
+    }
+
+    public function cameraStatusLogs()
+    {
+        return $this->hasMany(CameraStatusLog::class);
+    }
+}

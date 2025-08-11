@@ -7,32 +7,40 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
+use Illuminate\Database\Eloquent\SoftDeletes; // ✅ This is the correct SoftDeletes
 
+use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, HasRoles, SoftDeletes;
+  protected $fillable = ['name', 'email', 'password', 'role'];
+    protected $casts = ['role' => 'string'];
+    
+    protected $hidden = [
+        
+        'remember_token',
+    ];
+
+    public function controlRoom()
+    {
+        return $this->belongsTo(ControlRoom::class);
+    }
+
 
     /**
      * The attributes that are mass assignable.
      *
      * @var list<string>
      */
-    protected $fillable = [
-        'name',
-        'email',
-        'password',
-    ];
+   
 
     /**
      * The attributes that should be hidden for serialization.
      *
      * @var list<string>
      */
-    protected $hidden = [
-        'password',
-        'remember_token',
-    ];
+  
 
     /**
      * Get the attributes that should be cast.
@@ -58,4 +66,5 @@ class User extends Authenticatable
             ->map(fn ($word) => Str::substr($word, 0, 1))
             ->implode('');
     }
+
 }
