@@ -4,124 +4,129 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\TaskResource\Pages;
 use App\Models\Task;
-use Filament\Forms;
-use Filament\Forms\Form;
+use App\Models\ControlRoom;
+use App\Models\Site;
 use Filament\Resources\Resource;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Toggle;
-use Filament\Forms\Components\TimePicker;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\BooleanColumn;
-use Maatwebsite\Excel\Facades\Excel;
-use App\Imports\TasksImport;
+use Illuminate\Database\Eloquent\Builder;
 
 class TaskResource extends Resource
 {
     protected static ?string $model = Task::class;
-    protected static ?string $navigationIcon = 'heroicon-o-clipboard-document';
-    protected static ?string $navigationGroup = 'Monitoring';
 
-    public static function form(Form $form): Form
-    {
-        return $form
-            ->schema([
-                Select::make('control_room_id')
-                    ->relationship('controlRoom', 'name')
-                    ->required()
-                    ->label('Control Room'),
-                Select::make('site_id')
-                    ->relationship('site', 'name')
-                    ->nullable()
-                    ->label('Site'),
-                Select::make('camera_ids')
-                    ->relationship('cameras', 'name', fn ($query) => $query->where('is_active', true))
-                    ->multiple()
-                    ->nullable()
-                    ->label('Cameras'),
-                TextInput::make('title')
-                    ->required()
-                    ->maxLength(255)
-                    ->label('Task Title'),
-                Textarea::make('message')
-                    ->required()
-                    ->label('Task Message'),
-                TextInput::make('duration_minutes')
-                    ->numeric()
-                    ->required()
-                    ->minValue(1)
-                    ->default(10)
-                    ->label('Duration (Minutes)'),
-                Toggle::make('is_priority')
-                    ->label('Priority Task')
-                    ->default(false),
-                Toggle::make('is_break')
-                    ->label('Is Break')
-                    ->default(false),
-                Select::make('break_type')
-                    ->options(['eye_break' => 'Eye Break', 'lunch_break' => 'Lunch Break'])
-                    ->nullable()
-                    ->label('Break Type'),
-                TimePicker::make('scheduled_time')
-                    ->nullable()
-                    ->label('Scheduled Time'),
-                TextInput::make('frequency_hours')
-                    ->numeric()
-                    ->nullable()
-                    ->label('Frequency (Hours)'),
-                Toggle::make('is_active')
-                    ->label('Active')
-                    ->default(true),
-            ]);
-    }
+    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
     public static function table(Table $table): Table
     {
         return $table
             ->columns([
-                TextColumn::make('title')->label('Title')->sortable()->searchable(),
-                TextColumn::make('controlRoom.name')->label('Control Room')->sortable()->searchable(),
-                TextColumn::make('site.name')->label('Site')->sortable()->searchable(),
-                BooleanColumn::make('is_priority')->label('Priority'),
-                BooleanColumn::make('is_break')->label('Break'),
-                TextColumn::make('break_type')->label('Break Type'),
-                TextColumn::make('scheduled_time')->label('Scheduled Time'),
-                TextColumn::make('frequency_hours')->label('Frequency (Hours)'),
-                BooleanColumn::make('is_active')->label('Active'),
+                Tables\Columns\TextColumn::make('controlRoom.name')
+                    ->label('Control Room')
+                    ->sortable()
+                    ->searchable(),
+
+                Tables\Columns\TextColumn::make('site.name')
+                    ->label('Site')
+                    ->sortable()
+                    ->searchable(),
+
+                Tables\Columns\TextColumn::make('cameraNames')
+                    ->label('Cameras')
+                    ->limit(30)
+                    ->tooltip(fn ($record) => 
+                        implode(', ', is_array($record->cameraNames) ? $record->cameraNames : (array) $record->cameraNames)
+                    ),
+
+                Tables\Columns\BadgeColumn::make('type')
+                    ->label('Task Type')
+                    ->colors([
+                        'primary' => 'cross_country',
+                        'secondary' => 'kenya_hatchery',
+                        'info' => 'lunch_break',
+                        'success' => 'country_specific',
+                    ])
+                    ->sortable(),
+
+                Tables\Columns\BadgeColumn::make('status')
+                    ->label('Status')
+                    ->colors([
+                        'success' => 'sent',
+                        'warning' => 'pending',
+                        'danger' => 'failed',
+                        'primary' => 'processing',
+                    ])
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('created_at')
+                    ->label('Generated At')
+                    ->dateTime('M d, Y H:i')
+                    ->sortable()
+                    ->since(),
             ])
             ->filters([
-                //
-            ])
-            ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
-                Tables\Actions\Action::make('import')
-                    ->label('Import Tasks')
-                    ->action(function ($data) {
-                        Excel::import(new TasksImport, $data['file']);
-                        return redirect()->back()->with('success', 'Tasks imported successfully.');
+                Tables\Filters\SelectFilter::make('control_room_id')
+                    ->label('Control Room')
+                    ->options(ControlRoom::pluck('name', 'id'))
+                    ->searchable()
+                    ->query(fn (Builder $query, $state) => $state ? $query->where('control_room_id', $state) : $query),
+
+                Tables\Filters\SelectFilter::make('site_id')
+                    ->label('Site')
+                    ->options(function ($livewire) {
+                        $controlRoomId = $livewire->tableFilters['control_room_id']['value'] ?? null;
+
+                        $query = Site::query()->with('branch.country');
+
+                        if ($controlRoomId) {
+                            $countryId = ControlRoom::where('id', $controlRoomId)->value('country_id');
+                            if ($countryId) {
+                                $query->whereHas('branch.country', fn (Builder $q) => $q->where('id', $countryId));
+                            }
+                        }
+
+                        $sites = $query->get();
+
+                        // Group sites by country name for better organization
+                        return $sites->groupBy(fn ($site) => $site->branch->country->name)
+                                     ->mapWithKeys(fn ($sites, $countryName) => [
+                                         $countryName => $sites->pluck('name', 'id')
+                                     ])
+                                     ->toArray();
                     })
-                    ->form([
-                        Forms\Components\FileUpload::make('file')
-                            ->label('Excel File')
-                            ->acceptedFileTypes(['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
-                            ->required(),
-                    ]),
+                    ->searchable()
+                    ->query(fn (Builder $query, $state) => $state ? $query->where('site_id', $state) : $query),
+
+                Tables\Filters\SelectFilter::make('type')
+                    ->label('Task Type')
+                    ->options([
+                        'cross_country' => 'Cross Country',
+                        'kenya_hatchery' => 'Kenya Hatchery',
+                        'lunch_break' => 'Lunch Break',
+                        'country_specific' => 'Country Specific',
+                    ])
+                    ->searchable(),
             ])
-            ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
-            ]);
+            ->defaultSort('created_at', 'desc')
+            ->filtersFormColumns(3)  // Organize filters in 3 columns
+            ->persistFiltersInSession();  // Persist filters across page reloads
+    }
+
+    public static function getRelations(): array
+    {
+        return [];
     }
 
     public static function getPages(): array
     {
         return [
             'index' => Pages\ListTasks::route('/'),
-            'create' => Pages\CreateTask::route('/create'),
-            'edit' => Pages\EditTask::route('/{record}/edit'),
         ];
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->with(['controlRoom', 'site.branch.country']);
     }
 }

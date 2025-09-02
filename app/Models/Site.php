@@ -43,4 +43,8 @@ class Site extends Model
     {
         return $this->hasMany(BranchStatusLog::class);
     }
+    public function country()
+{
+    return $this->belongsTo(\App\Models\Country::class, 'id'); // Adjust column if different
+}
 }

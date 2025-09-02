@@ -34,4 +34,15 @@ class Branch extends Model
     {
         return $this->hasMany(BranchStatusLog::class);
     }
+    public function branchCameras()
+{
+    return $this->hasManyThrough(
+        \App\Models\Camera::class,
+        \App\Models\Branch::class,
+        'country_id',         // Foreign key on branches
+        'site_id',            // Foreign key on cameras
+        'id',                 // Local key on countries
+        'id'                  // Local key on branches
+    )->join('sites', 'sites.id', '=', 'cameras.site_id');
+}
 }

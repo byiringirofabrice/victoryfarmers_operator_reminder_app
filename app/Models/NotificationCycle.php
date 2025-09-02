@@ -1,4 +1,5 @@
 <?php
+// app/Models/NotificationCycle.php
 
 namespace App\Models;
 
@@ -7,26 +8,18 @@ use Illuminate\Database\Eloquent\Model;
 class NotificationCycle extends Model
 {
     protected $fillable = [
-        'control_room_id',
-        'task_id',
-        'last_notification_sent',
-        'cycle_started_at',
-        'is_active',
+        'site_id',
+        'last_camera_ids',
+        'last_notified_at',
     ];
 
     protected $casts = [
-        'last_notification_sent' => 'datetime',
-        'cycle_started_at' => 'datetime',
+        'last_camera_ids' => 'array',
+        'last_notified_at' => 'datetime',
     ];
 
-    // Relationships
-    public function controlRoom()
+    public function site()
     {
-        return $this->belongsTo(ControlRoom::class);
-    }
-
-    public function task()
-    {
-        return $this->belongsTo(Task::class);
+        return $this->belongsTo(Site::class);
     }
 }

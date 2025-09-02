@@ -43,4 +43,20 @@ class ControlRoom extends Model
     {
         return $this->hasMany(Notification::class);
     }
+    public function site()
+{
+    return $this->belongsTo(Site::class);
+}
+
+    public function countryCameras()
+    {
+        return $this->hasManyThrough(
+            Camera::class,
+            Country::class,
+            'id',               // Foreign key on countries
+            'control_room_id', // Foreign key on cameras
+            'country_id',      // Local key on control_rooms
+            'id'               // Local key on countries
+        );
+    }
 }

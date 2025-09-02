@@ -5,6 +5,8 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\CameraResource\Pages;
 use App\Models\Camera;
 use Filament\Forms;
+use Filament\Tables\Actions\ImportAction;
+use App\Filament\Imports\CameraImporter;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Forms\Components\TextInput;
@@ -14,8 +16,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BooleanColumn;
-use Maatwebsite\Excel\Facades\Excel;
-use App\Imports\CamerasImport;
+
 
 class CameraResource extends Resource
 {
@@ -27,35 +28,53 @@ class CameraResource extends Resource
     {
         return $form
             ->schema([
-                Select::make('site_id')
-                    ->relationship('site', 'name')
-                    ->required()
-                    ->label('Site'),
+                // Country select
+                Select::make('country_id')
+                    ->label('Country')
+                    ->relationship('site.branch.controlRoom.country', 'name')
+                    ->options(fn () => \App\Models\Country::pluck('name', 'id'))
+                    ->reactive()
+                    ->afterStateUpdated(fn (callable $set) => $set('control_room_id', null)),
+
+                // Control Room based on Country
                 Select::make('control_room_id')
-                    ->relationship('controlRoom', 'name')
-                    ->required()
-                    ->label('Control Room'),
-                TextInput::make('name')
-                    ->required()
-                    ->maxLength(255)
-                    ->label('Camera Name'),
+                    ->label('Control Room')
+                    ->options(fn (callable $get) => 
+                        \App\Models\ControlRoom::where('country_id', $get('country_id'))->pluck('name', 'id')
+                    )
+                    ->reactive()
+                    ->afterStateUpdated(fn (callable $set) => $set('branch_id', null))
+                    ->required(),
+
+                // Branch based on Control Room
+                Select::make('branch_id')
+                    ->label('Branch')
+                    ->options(fn (callable $get) =>
+                        \App\Models\Branch::where('control_room_id', $get('control_room_id'))->pluck('name', 'id')
+                    )
+                    ->reactive()
+                    ->afterStateUpdated(fn (callable $set) => $set('site_id', null))
+                    ->required(),
+
+                // Site based on Branch
+                Select::make('site_id')
+                    ->label('Site')
+                    ->options(fn (callable $get) =>
+                        \App\Models\Site::where('branch_id', $get('branch_id'))->pluck('name', 'id')
+                    )
+                    ->required(),
+
+                TextInput::make('name')->required()->label('Camera Name'),
+
                 Select::make('camera_type')
                     ->options(['fixed' => 'Fixed', 'ptz' => 'PTZ'])
                     ->required()
                     ->label('Camera Type'),
-                Toggle::make('is_priority')
-                    ->label('Priority Camera')
-                    ->default(false),
-                TextInput::make('sort_order')
-                    ->numeric()
-                    ->default(0)
-                    ->label('Sort Order'),
-                Toggle::make('is_active')
-                    ->label('Active')
-                    ->default(true),
-                Toggle::make('is_online')
-                    ->label('Online')
-                    ->default(true),
+
+                Toggle::make('is_priority')->label('Priority Camera')->default(false),
+                TextInput::make('sort_order')->numeric()->default(0)->label('Sort Order')->hidden(),
+                Toggle::make('is_active')->label('Active')->default(true),
+                Toggle::make('is_online')->label('Online')->default(true),
             ]);
     }
 
@@ -63,38 +82,37 @@ class CameraResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('name')->label('Name')->sortable()->searchable(),
-                TextColumn::make('site.name')->label('Site')->sortable()->searchable(),
-                TextColumn::make('controlRoom.name')->label('Control Room')->sortable()->searchable(),
-                TextColumn::make('camera_type')->label('Type')->sortable(),
-                BooleanColumn::make('is_priority')->label('Priority'),
-                TextColumn::make('sort_order')->label('Sort Order'),
-                BooleanColumn::make('is_active')->label('Active'),
-                BooleanColumn::make('is_online')->label('Online'),
+                TextColumn::make('id')->label('Camera ID')->sortable()->searchable()->toggleable(),
+                TextColumn::make('site.branch.controlRoom.country.name')->label('Country')->sortable()->searchable()->toggleable(),
+                TextColumn::make('site.branch.controlRoom.name')->label('Control Room')->sortable()->searchable()->toggleable(),
+                TextColumn::make('site.branch.name')->label('Branch')->sortable()->searchable()->toggleable(),
+                TextColumn::make('site.name')->label('Site')->sortable()->searchable()->toggleable(),
+                TextColumn::make('name')->label('Camera Name')->searchable()->sortable()->toggleable(),
+                BooleanColumn::make('is_priority')->label('Priority')->sortable()->searchable()->toggleable(),
+                BooleanColumn::make('is_active')->label('Active')->sortable()->searchable()->toggleable(),
+                BooleanColumn::make('is_online')->label('Online')->sortable()->searchable()->toggleable(),
             ])
             ->filters([
-                //
+                // Your filters here
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
-                Tables\Actions\Action::make('import')
-                    ->label('Import Cameras')
-                    ->action(function ($data) {
-                        Excel::import(new CamerasImport, $data['file']);
-                        return redirect()->back()->with('success', 'Cameras imported successfully.');
-                    })
-                    ->form([
-                        Forms\Components\FileUpload::make('file')
-                            ->label('Excel File')
-                            ->acceptedFileTypes(['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
-                            ->required(),
-                    ]),
             ])
+            ->headerActions([
+            Tables\Actions\CreateAction::make(),
+                     ImportAction::make()
+                       ->importer(CameraImporter::class)
+            ->label('Import Cameras')
+                ->color('primary'),
+])
+
             ->bulkActions([
                 Tables\Actions\DeleteBulkAction::make(),
             ]);
     }
+
+
 
     public static function getPages(): array
     {

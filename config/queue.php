@@ -108,5 +108,10 @@ return [
         'database' => env('DB_CONNECTION', 'sqlite'),
         'table' => 'failed_jobs',
     ],
-
+'imports' => [
+    'driver' => 'database',
+    'table' => 'jobs',
+    'queue' => 'imports',
+    'retry_after' => 90,
+],
 ];

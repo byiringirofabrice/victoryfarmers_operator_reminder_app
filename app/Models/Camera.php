@@ -25,23 +25,23 @@ class Camera extends Model
     ];
 
     // Relationships
+     public function controlRoom()
+    {
+        return $this->belongsTo(ControlRoom::class);
+    }
+
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
+    }
     public function site()
     {
         return $this->belongsTo(Site::class);
     }
 
-    public function controlRoom()
-    {
-        return $this->belongsTo(ControlRoom::class);
-    }
+   
+  
 
-    public function notifications()
-    {
-        return $this->hasMany(Notification::class);
-    }
 
-    public function cameraStatusLogs()
-    {
-        return $this->hasMany(CameraStatusLog::class);
-    }
+    
 }

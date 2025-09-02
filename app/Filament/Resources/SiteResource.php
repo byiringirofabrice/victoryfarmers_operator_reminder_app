@@ -3,17 +3,22 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\SiteResource\Pages;
+use App\Models\Branch;
+use App\Models\Country;
 use App\Models\Site;
 use Filament\Forms;
-use Filament\Forms\Form;
-use Filament\Resources\Resource;
-use Filament\Forms\Components\TextInput;
+use Filament\Forms\Set;
+use Filament\Forms\Get;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Form;
+
+use Filament\Resources\Resource;
 use Filament\Tables;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BooleanColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 
 class SiteResource extends Resource
 {
@@ -25,10 +30,26 @@ class SiteResource extends Resource
     {
         return $form
             ->schema([
-                Select::make('branch_id')
-                    ->relationship('branch', 'name')
-                    ->required()
-                    ->label('Branch'),
+                Select::make('country_id')
+    ->label('Country')
+    ->options(Country::all()->pluck('name', 'id'))
+    ->reactive()
+    ->afterStateUpdated(fn (Set $set) => $set('branch_id', null))
+    ->required(),
+
+Select::make('branch_id')
+    ->label('Branch')
+    ->options(function (Get $get) {
+        $countryId = $get('country_id');
+        if (!$countryId) return [];
+
+        return Branch::where('country_id', $countryId)->pluck('name', 'id');
+    })
+    ->searchable()
+    ->required()
+    ->reactive(),
+
+                
                 TextInput::make('name')
                     ->required()
                     ->maxLength(255)
@@ -53,6 +74,7 @@ class SiteResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('name')->label('Name')->sortable()->searchable(),
+                TextColumn::make('branch.country.name')->label('Country')->sortable()->searchable(),
                 TextColumn::make('branch.name')->label('Branch')->sortable()->searchable(),
                 BooleanColumn::make('is_priority')->label('Priority'),
                 BooleanColumn::make('is_active')->label('Active'),

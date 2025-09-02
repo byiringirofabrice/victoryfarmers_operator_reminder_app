@@ -4,7 +4,7 @@ use App\Http\Controllers\OperatorController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
-
+use App\Http\Controllers\PushSubscriptionController;
 Route::get('/', function () {
     return view('welcome');
 })->name('home');
@@ -35,15 +35,46 @@ Route::middleware(['auth', 'role:operator'])->group(function () {
     Route::get('/operator/manage', [OperatorController::class, 'manage'])->name('operator.manage');
 });
 
-Route::post('/subscribe', function (Request $request) {
-    $user = auth()->user();
-    $user->updatePushSubscription(
-        $request->input('endpoint'),
-        $request->input('keys.p256dh'),
-        $request->input('keys.auth'),
-        $request->input('contentEncoding')
-    );
-    return response()->json(['success' => true]);
-})->middleware('auth')->name('subscribe');
+
+Route::post('/subscribe', [PushSubscriptionController::class, 'subscribe'])->middleware('auth');
+Route::post('/unsubscribe', [PushSubscriptionController::class, 'unsubscribe'])->middleware('auth');
+
+
+// Route::post('/subscribe', function (Request $request) {
+//     $user = auth()->user();
+//     $user->updatePushSubscription(
+//         $request->input('endpoint'),
+//         $request->input('keys.p256dh'),
+//         $request->input('keys.auth'),
+//         $request->input('contentEncoding')
+//     );
+//     return response()->json(['success' => true]);
+// })->middleware('auth')->name('subscribe');
+Route::get('/generate-camera-template', function() {
+    $headers = [
+        'Country', 
+        'Control Room',
+        'Branch',
+        'Site',
+        'Camera Name',
+        'Camera Type (fixed/ptz)',
+        'Is Priority (1/0)',
+        'Sort Order',
+        'Is Active (1/0)',
+        'Is Online (1/0)'
+    ];
+    
+    $sampleData = [
+        implode(',', $headers),
+        'UAE,Dubai Central,Mall,Site A,Entrance Cam,fixed,1,1,1,1',
+        'KSA,Riyadh Main,Central,Site B,Parking Cam,ptz,0,2,1,0'
+    ];
+
+    $content = implode("\n", $sampleData);
+    
+    return response($content)
+        ->header('Content-Type', 'text/csv')
+        ->header('Content-Disposition', 'attachment; filename="cameras_import_template.csv"');
+});
 
 require __DIR__.'/auth.php';

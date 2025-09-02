@@ -28,4 +28,16 @@ class Country extends Model
     {
         return $this->hasMany(BranchStatusLog::class);
     }
+    public function cameras()
+{
+    return $this->hasManyThrough(
+        \App\Models\Camera::class,
+        \App\Models\ControlRoom::class,
+        'country_id',       // Foreign key on control_rooms
+        'control_room_id',  // Foreign key on cameras
+        'id',               // Local key on countries
+        'id'                // Local key on control_rooms
+    );
+}
+
 }

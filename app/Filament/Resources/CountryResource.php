@@ -11,6 +11,10 @@ use Filament\Forms\Components\TextInput;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Forms\Components\Select;
+
+use Filament\Tables\Actions\DeleteAction;
+use Filament\Tables\Actions\EditAction;
 
 class CountryResource extends Resource
 {
@@ -31,10 +35,17 @@ class CountryResource extends Resource
                     ->maxLength(2)
                     ->unique(Country::class, 'code', ignoreRecord: true)
                     ->label('Country Code (ISO 3166-1 alpha-2)'),
-                TextInput::make('timezone')
-                    ->required()
-                    ->maxLength(30)
-                    ->label('Timezone (e.g., Africa/Kigali)'),
+               Select::make('timezone')
+    ->label('Timezone')
+    ->required()
+    ->options(
+        collect(\DateTimeZone::listIdentifiers(\DateTimeZone::AFRICA))
+            ->mapWithKeys(fn ($tz) => [$tz => $tz])
+            ->toArray()
+    )
+    ->searchable()
+    ->native(false)
+    ->default('Africa/Kigali')
             ]);
     }
 
