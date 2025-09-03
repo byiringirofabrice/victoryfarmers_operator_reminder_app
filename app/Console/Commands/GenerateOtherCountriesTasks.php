@@ -4,7 +4,6 @@ namespace App\Console\Commands;
 
 use App\Models\Camera;
 use App\Models\ControlRoom;
-use App\Models\NotificationCycle;
 use App\Models\Site;
 use App\Models\Task;
 use Carbon\Carbon;
@@ -32,12 +31,12 @@ class GenerateOtherCountriesTasks extends Command
             $timezone = $controlRoom->country->timezone ?? 'Africa/Nairobi';
             $now = Carbon::now($timezone);
 
-            // Lunch reminder at 12:00 PM local time
+            // 🍽️ Lunch reminder at 12:00 PM local time
             if ($force || ($now->hour === 12 && $now->minute === 0 && $now->second < 30)) {
                 $this->createLunchReminder($controlRoom, $now);
             }
 
-            // Every 30 minutes
+            // ⏰ Every 30 minutes (:00 and :30)
             if ($force || ($now->minute % 30 === 0 && $now->second < 30)) {
                 $this->createCountryTasks($controlRoom, $now);
             }
@@ -57,48 +56,66 @@ class GenerateOtherCountriesTasks extends Command
             ->get();
 
         foreach ($sites as $site) {
-            $cameras = $site->cameras;
-            if ($cameras->isEmpty()) continue;
+            try {
+                $cameras = $site->cameras->sortBy('id')->values()->pluck('id')->toArray();
+                $total = count($cameras);
+                
+                if ($total === 0) {
+                    $this->info("Site {$site->name}: No cameras, skipping");
+                    continue;
+                }
 
-            $cameraIds = $cameras->pluck('id')->toArray();
+                // File-based tracking - much simpler and reliable
+                $trackingFile = storage_path("app/tracking/site_{$site->id}_control_room_{$controlRoom->id}.txt");
+                
+                // Read current index or start at 0
+                $currentIndex = 0;
+                if (file_exists($trackingFile)) {
+                    $currentIndex = (int) trim(file_get_contents($trackingFile));
+                }
 
-            $cycle = NotificationCycle::firstOrCreate(
-                ['site_id' => $site->id, 'control_room_id' => $controlRoom->id],
-                ['last_camera_ids' => json_encode([])]
-            );
+                // Ensure index is within bounds
+                if ($currentIndex < 0 || $currentIndex >= $total) {
+                    $currentIndex = 0;
+                }
 
-            $used = json_decode($cycle->last_camera_ids, true) ?? [];
-            $available = array_values(array_diff($cameraIds, $used));
+                // Select next 2 cameras
+                $selected = [];
+                for ($i = 0; $i < min(2, $total); $i++) {
+                    $index = ($currentIndex + $i) % $total;
+                    $selected[] = $cameras[$index];
+                }
 
-            if (empty($available)) {
-                // Restart cycle
-                $available = $cameraIds;
-                $used = [];
+                // Update index for next run
+                $newIndex = ($currentIndex + 2) % $total;
+
+                // Ensure directory exists and save new index
+                if (!is_dir(dirname($trackingFile))) {
+                    mkdir(dirname($trackingFile), 0755, true);
+                }
+                file_put_contents($trackingFile, $newIndex);
+
+                // 📝 Save task
+                $task = Task::create([
+                    'control_room_id' => $controlRoom->id,
+                    'site_id' => $site->id,
+                    'camera_ids' => $selected,
+                    'type' => 'country_specific',
+                    'status' => 'sent',
+                    'notified_at' => $now,
+                ]);
+
+                SendTaskNotificationJob::dispatch($task->id);
+
+                $this->info("Site {$site->name}: selected cameras " . implode(',', $selected) . " | Next index: {$newIndex}");
+
+            } catch (\Exception $e) {
+                $this->error("Error processing site {$site->name}: " . $e->getMessage());
+                Log::error("Error processing site {$site->name}", ['error' => $e->getMessage()]);
             }
-
-            // Pick 2 cameras max per site
-            $pickCount = min(2, count($available));
-            $nextCameras = array_splice($available, 0, $pickCount);
-
-            // Create a task for this site
-            $task = Task::create([
-                'control_room_id' => $controlRoom->id,
-                'site_id' => $site->id,
-                'camera_ids' => $nextCameras,
-                'type' => 'country_specific',
-                'status' => 'sent',
-                'notified_at' => $now,
-            ]);
-
-            SendTaskNotificationJob::dispatch($task->id);
-
-            // Update cycle
-            $cycle->last_camera_ids = json_encode(array_merge($used, $nextCameras));
-            $cycle->last_notified_at = $now;
-            $cycle->save();
         }
 
-        Log::info("✅ Tasks created for {$controlRoom->country->code} at {$now->toDateTimeString()} and notifications dispatched.");
+        Log::info("✅ Country tasks created for {$controlRoom->country->code} at {$now->toDateTimeString()}");
     }
 
     protected function createLunchReminder(ControlRoom $controlRoom, Carbon $now)
@@ -116,8 +133,10 @@ class GenerateOtherCountriesTasks extends Command
                 'status' => 'sent',
                 'notified_at' => $now,
             ]);
+
             SendTaskNotificationJob::dispatch($task->id);
-            Log::info("✅ Lunch break reminder created for {$controlRoom->country->code} Control Room and notification dispatched.");
+
+            Log::info("🍽️ Lunch break reminder created for {$controlRoom->country->code} Control Room and notification dispatched.");
         }
     }
 }

@@ -12,7 +12,9 @@ Artisan::command('inspire', function () {
 // Define schedules here
 Schedule::command('queue:prune-failed --hours=26')->daily();
 Schedule::command('queue:prune-batches --hours=26')->daily();
-Schedule::command('tasks:generate-priority --force')->everyTenMinutes();
+
+// FIXED: Use cron expression for 7 minutes
+Schedule::command('tasks:generate-priority')->cron('*/7 * * * *')->withoutOverlapping();
 
 Schedule::command('tasks:generate')->everyTenMinutes()->withoutOverlapping();
 Schedule::command('tasks:cleanup')->daily()->withoutOverlapping();

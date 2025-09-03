@@ -91,12 +91,41 @@ class SendTaskNotificationJob implements ShouldQueue
 
     protected function titleForTask(Task $task): string
     {
-        return match($task->type) {
-            'priority'       => '🚨 Hi',
-            'kenya_hatchery' => '🐣 Hatchery — Quick Check',
-            'lunch_break'    => '🍽️ Time to take lunch!!!!',
-            default          => '👋 Time to report on these camares',
-        };
+        $titles = [
+            'priority' => [
+                '🚨 Priority Check Needed!',
+                '⚠️ Attention Required!',
+                '🔍 Priority Camera Alert',
+                '👀 Important Check',
+                '📸 Priority Monitoring'
+            ],
+            'kenya_hatchery' => [
+                '🐣 Hatchery Check',
+                '🥚 Hatchery Monitoring',
+                '🐥 Hatchery Update',
+                '🏭 Hatchery Inspection',
+                '🔬 Hatchery Watch'
+            ],
+            'lunch_break' => [
+                '🍽️ Lunch Time!',
+                '⏰ Break Time!',
+                '🥗 Lunch Break',
+                '☕ Time to Refuel',
+                '🌮 Lunch Alert'
+            ],
+            'default' => [
+                '👋 Time to Report',
+                '📋 Monitoring Check',
+                '🔔 Task Reminder',
+                '📊 Status Update',
+                '👁️ Camera Check'
+            ]
+        ];
+
+        $type = $task->type;
+        $availableTitles = $titles[$type] ?? $titles['default'];
+        
+        return $availableTitles[array_rand($availableTitles)];
     }
 
     protected function buildBody(Task $task): string
@@ -107,12 +136,41 @@ class SendTaskNotificationJob implements ShouldQueue
             : (json_decode($task->camera_ids, true) ?? []);
 
         if (empty($cameraIds)) {
-            return match($task->type) {
-                'lunch_break'    => "🍽️ It's lunch time — take a well-deserved break!",
-                'kenya_hatchery' => "🐣 Please check the hatchery camera.",
-                'priority'       => "🚨 Urgent camera check required.",
-                default          => "Please check your dashboard for details."
-            };
+            $messages = [
+                'lunch_break' => [
+                    "🍽️ It's lunch time — take a well-deserved break!",
+                    "⏰ Time for lunch! Enjoy your meal!",
+                    "🥗 Lunch break — recharge and refresh!",
+                    "☕ Break time! Enjoy your lunch!",
+                    "🌮 Lunch alert! Time to eat!"
+                ],
+                'kenya_hatchery' => [
+                    "🐣 Please check the hatchery camera.",
+                    "🥚 Hatchery requires your attention.",
+                    "🐥 Time to inspect the hatchery.",
+                    "🏭 Hatchery monitoring needed.",
+                    "🔬 Check hatchery conditions."
+                ],
+                'priority' => [
+                    "🚨 What's happening here?!",
+                    "⚠️ Situation requires attention!",
+                    "🔍 Please investigate this!",
+                    "👀 Immediate check needed!",
+                    "📸 Priority situation detected!"
+                ],
+                'default' => [
+                    "Please check your dashboard for details.",
+                    "Review the task details on your dashboard.",
+                    "Check the system for more information.",
+                    "See dashboard for complete details.",
+                    "Open dashboard for full context."
+                ]
+            ];
+
+            $type = $task->type;
+            $availableMessages = $messages[$type] ?? $messages['default'];
+            
+            return $availableMessages[array_rand($availableMessages)];
         }
 
         $cameras = Camera::whereIn('id', $cameraIds)->with('site')->get();
@@ -121,7 +179,16 @@ class SendTaskNotificationJob implements ShouldQueue
             $cam = $cameras->first();
             $siteName = $cam->site?->name ?? 'Site';
             $camName  = $cam->name ?? "Camera {$cam->id}";
-            return "🚨 Priority check required!\n📍 {$siteName} — 🎥 {$camName}";
+            
+            $priorityMessages = [
+                "🚨 What's happening here?!\n📍 {$siteName} — 🎥 {$camName}",
+                "⚠️ Attention needed!\n📍 {$siteName} — 🎥 {$camName}",
+                "🔍 Investigate this!\n📍 {$siteName} — 🎥 {$camName}",
+                "👀 Immediate check required!\n📍 {$siteName} — 🎥 {$camName}",
+                "📸 Priority alert!\n📍 {$siteName} — 🎥 {$camName}"
+            ];
+            
+            return $priorityMessages[array_rand($priorityMessages)];
         }
 
         $grouped = [];
@@ -130,9 +197,23 @@ class SendTaskNotificationJob implements ShouldQueue
             $grouped[$siteName][] = $cam->name ?? "Camera {$cam->id}";
         }
 
-        $lines = ["👋 Hey, it's time to check on the following cameras:"];
-        foreach ($grouped as $siteName => $names) {
-            $lines[] = "📍 {$siteName} — 🎥 " . implode(', ', $names);
+        // Shuffle the messages
+        $introMessages = [
+            "👋 Hey, it's time to check on:",
+            "📋 Please monitor these cameras:",
+            "🔔 Time to check these locations:",
+            "👁️ Camera inspection needed for:",
+            "📊 Status check required for:"
+        ];
+        
+        $lines = [$introMessages[array_rand($introMessages)]];
+
+        $counter = 1;
+        foreach ($grouped as $siteName => $cameraNames) {
+            foreach ($cameraNames as $cameraName) {
+                $lines[] = "{$counter}) {$siteName} - {$cameraName}";
+                $counter++;
+            }
         }
 
         return implode("\n", $lines);

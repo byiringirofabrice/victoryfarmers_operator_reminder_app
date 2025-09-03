@@ -57,7 +57,7 @@ class GenerateKenyaControlRoomTasks extends Command
             ->exists();
 
         if (!$already) {
-            $camera = Camera::where('name', 'LIKE', '%Hatchery%')->first();
+            $camera = Camera::where('name', 'LIKE', '%Kenya Hatchery%')->first();
 
             if ($camera) {
                 $task = Task::create([
@@ -79,16 +79,30 @@ class GenerateKenyaControlRoomTasks extends Command
     }
 
     /**
-     * For each active site pick one camera (using your NotificationCycle logic),
+     * For each active site (Kenya + Kagano/Kigembe only) pick one camera,
      * but create ONE aggregated Task that contains all selected cameras.
      */
     protected function createCrossCountryReminder(ControlRoom $controlRoom, Carbon $now)
     {
+        // Get ONLY Kenyan sites + specific Rwanda sites (Kagano and Kigembe)
         $sites = Site::with(['cameras' => fn ($q) =>
             $q->where('is_active', true)->where('is_online', true)
         ])
         ->where('is_active', true)
         ->where('is_online', true)
+        ->where(function ($query) {
+            // Kenyan sites
+            $query->whereHas('branch.controlRoom.country', function ($q) {
+                $q->where('code', 'KE');
+            })
+            // OR specific Rwanda sites
+            ->orWhere(function ($q) {
+                $q->whereHas('branch.controlRoom.country', function ($q) {
+                    $q->where('code', 'RW');
+                })
+                ->whereIn('name', ['Kagano', 'Kigembe']);
+            });
+        })
         ->get();
 
         $selectedCameraIds = []; // aggregated camera ids
@@ -132,6 +146,8 @@ class GenerateKenyaControlRoomTasks extends Command
             $selectedCameraIds[] = $next;
             $siteCameraMap[$site->id] = [$next];
             $anyPicked = true;
+
+            $this->info("Site {$site->name}: selected camera {$next}");
         }
 
         if ($anyPicked && !empty($selectedCameraIds)) {
@@ -143,16 +159,16 @@ class GenerateKenyaControlRoomTasks extends Command
                 'control_room_id' => $controlRoom->id,
                 'site_id' => null, // aggregated across many sites
                 'camera_ids' => $selectedCameraIds,
-                'type' => 'cross_country', // keep same type if you prefer
+                'type' => 'cross_country',
                 'status' => 'sent',
                 'notified_at' => $now,
-                // if your tasks table has a JSON 'meta' or 'extra' column you can store $siteCameraMap for UI
-                // 'extra' => ['site_camera_map' => $siteCameraMap],
             ]);
 
             SendTaskNotificationJob::dispatch($task->id);
 
-            Log::info('✅ Kenya cross-country aggregated task created and notification dispatched.');
+            $siteCount = count($siteCameraMap);
+            $cameraCount = count($selectedCameraIds);
+            Log::info("✅ Kenya cross-country aggregated task created with {$cameraCount} cameras from {$siteCount} sites");
         } else {
             Log::info('ℹ️ No active cameras found for Kenya cross-country task.');
         }

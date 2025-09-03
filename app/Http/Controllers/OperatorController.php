@@ -62,6 +62,7 @@ class OperatorController extends Controller
 
         return view('operator.index', compact('controlRooms'));
     }
+    
 
     public function manage()
     {
